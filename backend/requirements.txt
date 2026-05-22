@@ -1,0 +1,6 @@
+fastapi>=0.100.0
+uvicorn>=0.22.0
+deep-translator>=1.11.4
+gtts>=2.3.2
+aiofiles>=23.1.0
+websockets>=11.0.3

@@ -1,0 +1,172 @@
+PROJECT CHARTER
+IFT 593 – Applied Project
+Arizona State University  
+1.  Project Identification
+Project Title
+Smart Meeting Companion: Automated Summarization, Chatbot Interaction, and Speech-to-Speech Translation
+Course
+IFT 593 – Applied Project
+Semester / Year
+Final Semester, Fall 2026
+Team Members
+Hasti Patel (ASU ID: 1236014951) Dhyey Patel (ASU ID: 1236414116)
+Project Sponsor / Advisor
+Derex Griffin
+2.  Project Purpose & Justification
+As organizations increasingly adopt hybrid and remote work models, the volume of virtual meetings has grown substantially. Professionals spend significant time in meetings, yet retaining, retrieving, and acting on meeting content remains a persistent challenge. Language barriers further limit collaboration in global teams.
+
+This project addresses these challenges by developing an AI-powered Smart Meeting Companion that automates the processing of live meeting conversations. The system will deliver end-to-end intelligence: converting spoken language to text, generating concise summaries, enabling chatbot-based Q&A on meeting content, and providing real-time speech-to-speech translation for multilingual participants.
+3.  Project Objectives
+Develop a real-time speech recognition pipeline to transcribe meeting conversations accurately.
+Generate concise, context-aware meeting summaries using large language models (LLMs).
+Build a chatbot interface allowing users to query and interact with meeting content (e.g., action items, decisions, topics discussed).
+Implement speech-to-speech translation to enable seamless multilingual communication during meetings.
+Deliver a functional prototype that integrates all four capabilities into a cohesive user-facing system.
+4.  Project Scope
+4.1  In Scope
+Real-time or near-real-time speech-to-text (STT) transcription of meeting audio.
+Automatic meeting summarization using LLMs (e.g., GPT-series or open-source equivalents).
+Chatbot interface enabling natural language queries against the meeting transcript/summary.
+Speech-to-speech translation: spoken input in one language converted to spoken output in another language via translation API + text-to-speech (TTS).
+Integration of the above components into a working prototype (web or desktop application).
+Testing and validation of each module individually and as an integrated system.
+
+4.2  Out of Scope
+Native mobile application development (iOS / Android).
+Integration with proprietary meeting platforms (e.g., Zoom, Teams, Google Meet) via official APIs.
+Training custom ML models from scratch; pre-trained models and APIs will be used.
+Production-level deployment, security hardening, or commercial release.
+5.  Deliverables
+#
+Deliverable
+Type
+Target Date
+1
+Project Charter (this document)
+Document
+Week 1
+2
+System Architecture & Design Document
+Document
+Week 3
+3
+STT Transcription Module (Prototype)
+Software Module
+Week 5
+4
+Meeting Summarization Module
+Software Module
+Week 7
+5
+Chatbot Interface Module
+Software Module
+Week 9
+6
+Speech-to-Speech Translation Module
+Software Module
+Week 11
+7
+Integrated System Prototype
+Software
+Week 13
+8
+Final Report & Presentation
+Document / Slides
+Week 15
+6.  Technology Stack
+Component
+Tools / APIs / Models
+Speech-to-Text (STT)
+OpenAI Whisper, Google Speech-to-Text API, or Azure Cognitive Services Speech
+Large Language Models
+OpenAI GPT-4 / GPT-3.5, or open-source LLMs (e.g., LLaMA, Mistral) via HuggingFace
+Translation
+Google Cloud Translation API, DeepL API, or Microsoft Translator
+Text-to-Speech (TTS)
+Google Cloud TTS, Amazon Polly, or ElevenLabs
+Chatbot Framework
+LangChain, OpenAI Assistants API, or custom RAG pipeline
+Backend
+Python (FastAPI / Flask)
+Frontend / UI
+Streamlit, Gradio, or React.js
+Version Control
+GitHub
+7.  High-Level Milestones & Timeline
+Milestone
+Description
+Target Week
+M1
+Project Charter approved; team roles defined
+Week 1–2
+M2
+Architecture finalized; development environment set up
+Week 3
+M3
+STT and Summarization modules functional
+Week 7
+M4
+Chatbot interface operational on sample transcript
+Week 9
+M5
+Speech-to-speech translation module complete
+Week 11
+M6
+Fully integrated prototype with end-to-end testing
+Week 13
+M7
+Final report submitted and project presented
+Week 15
+8.  Team Roles & Responsibilities
+Team Member
+ASU ID
+Primary Responsibilities
+Hasti Patel
+1236014951
+STT module, Summarization module, LLM integration, Testing & QA
+Dhyey Patel
+1236414116
+Chatbot interface, Speech-to-speech translation, UI/UX design, System integration
+9.  Assumptions & Constraints
+Assumptions:
+Access to required APIs (OpenAI, Google Cloud, etc.) will be provisioned within the project budget/free-tier limits.
+Audio input will be in a reasonably clean environment; extreme background noise is not in scope.
+English will be the primary language for STT and summarization; additional languages supported for translation.
+All team members have access to Python development environments and collaborative tools (GitHub, etc.).
+
+Constraints:
+Project must be completed within the semester timeline (~15 weeks).
+No dedicated project budget; free-tier APIs and open-source models will be prioritized.
+Pre-trained models will be used; custom model training is not feasible within the timeline.
+System will be demonstrated via prototype; production deployment is not required.
+10.  Risk Register
+Risk
+Likelihood
+Impact
+Mitigation
+API rate limits or cost overruns
+Medium
+High
+Use free tiers; switch to open-source alternatives if needed
+STT accuracy issues with accents or noise
+Medium
+Medium
+Test with multiple STT models; pre-process audio
+LLM hallucinations in summaries / chatbot
+Medium
+Medium
+Implement grounding with retrieval-augmented generation (RAG)
+Integration complexity between modules
+High
+High
+Define clear APIs between modules early; integrate incrementally
+Timeline slippage
+Low
+High
+Bi-weekly check-ins; prioritize core features; scope reduction if needed
+11.  Success Criteria
+The system successfully transcribes a 5-minute meeting audio clip with ≥ 85% accuracy.
+Generated summaries capture all key decisions and action items from a sample meeting.
+Chatbot accurately answers at least 80% of test queries derived from meeting transcripts.
+Speech-to-speech translation correctly converts spoken input in English to at least two other languages with intelligible output.
+End-to-end prototype is demonstrated live during the final project presentation.

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Meeting Companion</title>
+  <link rel="stylesheet" href="panel.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <audio id="tts-player" style="display: none;"></audio>
+  <div class="app-container">
+    <header>
+      <h1>Smart Meeting</h1>
+      <button id="toggle-record" class="btn primary">Start Recording</button>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-target="transcript-view">Live</button>
+      <button class="tab-btn" data-target="summary-view">Summary</button>
+      <button class="tab-btn" data-target="chat-view">Chat</button>
+      <button class="tab-btn" data-target="translate-view">Translate</button>
+    </nav>
+
+    <main>
+      <!-- Transcript Tab -->
+      <section id="transcript-view" class="view active">
+        <div class="status-bar">
+          <span class="status-indicator"></span>
+          <span id="recording-status">Ready</span>
+        </div>
+        <div id="transcript-container" class="scroll-area">
+          <div class="placeholder">Transcripts will appear here...</div>
+        </div>
+      </section>
+
+      <!-- Summary Tab -->
+      <section id="summary-view" class="view">
+        <button id="generate-summary" class="btn secondary">Generate Summary</button>
+        <div id="summary-content" class="scroll-area mt-4">
+          <div class="placeholder">Click generate to get meeting summary.</div>
+        </div>
+      </section>
+
+      <!-- Chat Tab -->
+      <section id="chat-view" class="view flex-col">
+        <div id="chat-history" class="scroll-area flex-1">
+          <div class="chat-message assistant">
+            <p>Hi! Ask me anything about this meeting.</p>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <input type="text" id="chat-input" placeholder="Ask a question...">
+          <button id="send-chat" class="btn icon-btn">➤</button>
+        </div>
+      </section>
+
+      <!-- Translate Tab -->
+      <section id="translate-view" class="view">
+        <div class="translate-controls">
+          <label>Target Language:</label>
+          <select id="target-language">
+            <option value="Spanish">Spanish</option>
+            <option value="French">French</option>
+            <option value="German">German</option>
+            <option value="Mandarin">Mandarin</option>
+            <option value="Hindi">Hindi</option>
+          </select>
+          <button id="toggle-translation" class="btn secondary">Start Translation</button>
+          <button id="debug-translation" class="btn primary" style="margin-top: 10px;">Debug Inject Mock Text</button>
+        </div>
+        <div id="translation-container" class="scroll-area mt-4">
+          <div class="placeholder">Translations will appear here...</div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="panel.js"></script>
+</body>
+</html>
