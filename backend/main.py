@@ -2,13 +2,145 @@ import os
 import io
 import json
 import asyncio
+import time
+from collections import OrderedDict
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from deep_translator import GoogleTranslator
+from deep_translator import GoogleTranslator, MyMemoryTranslator
 from gtts import gTTS
 import base64
+
+# ---------------------------------------------------------------------------
+# Translation layer: cache + rate-limit + fallback chain
+# ---------------------------------------------------------------------------
+_TRANSLATE_MIN_INTERVAL = 1.5       # seconds between API calls (conservative)
+_TRANSLATE_MAX_RETRIES = 3          # per-provider retry count
+_translate_lock = asyncio.Lock()    # serialise outgoing translation requests
+_last_translate_time: float = 0.0   # monotonic epoch of the last API call
+
+# Simple LRU cache (text+target → translated text) – avoids hitting the API
+# for repeated phrases, which are very common in meetings.
+_CACHE_MAX = 256
+_translate_cache: OrderedDict = OrderedDict()
+
+
+def _cache_key(text: str, target: str) -> str:
+    return f"{target}||{text.strip().lower()}"
+
+
+def _cache_get(text: str, target: str):
+    key = _cache_key(text, target)
+    if key in _translate_cache:
+        _translate_cache.move_to_end(key)
+        return _translate_cache[key]
+    return None
+
+
+def _cache_put(text: str, target: str, result: str):
+    key = _cache_key(text, target)
+    _translate_cache[key] = result
+    _translate_cache.move_to_end(key)
+    if len(_translate_cache) > _CACHE_MAX:
+        _translate_cache.popitem(last=False)
+
+
+# MyMemory requires full locale codes, not the short ISO codes that Google uses.
+_MYMEMORY_SOURCE = "en-GB"
+_MYMEMORY_TARGET_MAP = {
+    "es":    "es-ES",
+    "fr":    "fr-FR",
+    "de":    "de-DE",
+    "zh-CN": "zh-CN",
+    "hi":    "hi-IN",
+}
+
+
+def _try_google(text: str, target_code: str) -> str:
+    """Attempt translation via Google free API."""
+    return GoogleTranslator(source="auto", target=target_code).translate(text)
+
+
+def _try_mymemory(text: str, target_code: str) -> str:
+    """Attempt translation via MyMemory (free, 5 000 chars/day anonymous)."""
+    mm_target = _MYMEMORY_TARGET_MAP.get(target_code, f"{target_code}-{target_code.upper()}")
+    return MyMemoryTranslator(source=_MYMEMORY_SOURCE, target=mm_target).translate(text)
+
+
+async def _rate_limited_translate(text: str, target_code: str) -> str:
+    """
+    Translate *text* → *target_code* with:
+      1. In-memory LRU cache check (instant, no API call)
+      2. Rate-limited Google Translate with retry + backoff
+      3. Fallback to MyMemory if Google is rate-limited
+    """
+    global _last_translate_time
+
+    # --- 1. Cache hit? Return immediately. ---
+    cached = _cache_get(text, target_code)
+    if cached is not None:
+        return cached
+
+    # --- 2. Try providers in order ---
+    providers = [
+        ("Google",   _try_google),
+        ("MyMemory", _try_mymemory),
+    ]
+    last_error = None
+
+    for provider_name, provider_fn in providers:
+        for attempt in range(_TRANSLATE_MAX_RETRIES):
+            async with _translate_lock:
+                # Enforce minimum gap between consecutive API calls
+                now = time.monotonic()
+                wait = _TRANSLATE_MIN_INTERVAL - (now - _last_translate_time)
+                if wait > 0:
+                    await asyncio.sleep(wait)
+
+                try:
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(None, provider_fn, text, target_code)
+                    _last_translate_time = time.monotonic()
+
+                    if result:
+                        _cache_put(text, target_code, result)
+                    return result
+
+                except Exception as e:
+                    _last_translate_time = time.monotonic()
+                    last_error = e
+                    err_msg = str(e).lower()
+
+                    is_rate_limit = ("too many requests" in err_msg
+                                    or "429" in err_msg
+                                    or "rate" in err_msg)
+
+                    if is_rate_limit:
+                        backoff = 2.0 * (2 ** attempt)   # 2 s → 4 s → 8 s
+                        print(f"[Translate/{provider_name}] Rate-limited, "
+                              f"backing off {backoff:.0f}s "
+                              f"(attempt {attempt + 1}/{_TRANSLATE_MAX_RETRIES})")
+                        await asyncio.sleep(backoff)
+                        if attempt == _TRANSLATE_MAX_RETRIES - 1:
+                            # exhausted retries for this provider → try next
+                            print(f"[Translate/{provider_name}] Exhausted retries, "
+                                  f"falling back to next provider.")
+                            break
+                        continue
+                    else:
+                        # Non-rate-limit error → try next provider immediately
+                        print(f"[Translate/{provider_name}] Error: {e}")
+                        break
+
+    raise RuntimeError(
+        f"All translation providers failed. Last error: {last_error}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# FastAPI application
+# ---------------------------------------------------------------------------
 
 app = FastAPI(title="Smart Meeting Companion API")
 
@@ -68,35 +200,73 @@ async def websocket_transcribe(websocket: WebSocket):
 async def websocket_translate(websocket: WebSocket):
     """
     Accepts text and a target language.
-    Translates the text using deep-translator.
+    Translates the text using deep-translator (rate-limited + cached + fallback chain).
     Synthesizes the translated text into audio using gTTS.
     Returns the translated text and the base64-encoded audio.
+
+    Implements server-side debouncing: if new requests arrive while a translation
+    is in progress, only the *latest* request is processed and older queued
+    requests are skipped.
     """
     await websocket.accept()
-    try:
-        while True:
-            data = await websocket.receive_json()
+
+    # Debounce state: latest pending request that hasn't been processed yet.
+    pending_request: dict | None = None
+    processing_event = asyncio.Event()
+    processing_event.set()            # start in "idle" state
+    closed = False
+
+    async def reader():
+        """Continuously read from the WebSocket and update the pending request."""
+        nonlocal pending_request, closed
+        try:
+            while True:
+                data = await websocket.receive_json()
+                pending_request = data
+                # Wake up the processor if it's waiting
+                processing_event.set()
+        except WebSocketDisconnect:
+            closed = True
+            processing_event.set()     # wake processor so it can exit
+
+    async def processor():
+        """Process the latest pending request, skipping stale ones."""
+        nonlocal pending_request
+        while not closed:
+            # Wait until a new request arrives
+            await processing_event.wait()
+            processing_event.clear()
+
+            if closed:
+                break
+
+            # Grab the latest request (skip any older ones)
+            data = pending_request
+            pending_request = None
+
+            if data is None:
+                continue
+
             text = data.get("text", "")
-            target_lang = data.get("target_language", "es") # default Spanish
-            
-            # 1. Translate Text
-            # We map full language names to language codes for gTTS and GoogleTranslate
-            # translator codes (deep-translator) and gTTS codes differ for Mandarin
+            target_lang = data.get("target_language", "es")
+
+            # Language mapping
             lang_map = {
-                "Spanish": {"translate": "es",    "tts": "es"},
-                "French":  {"translate": "fr",    "tts": "fr"},
-                "German":  {"translate": "de",    "tts": "de"},
-                "Mandarin":{"translate": "zh-CN", "tts": "zh"},  # gTTS accepts 'zh' for Chinese
-                "Hindi":   {"translate": "hi",    "tts": "hi"},
+                "Spanish":  {"translate": "es",    "tts": "es"},
+                "French":   {"translate": "fr",    "tts": "fr"},
+                "German":   {"translate": "de",    "tts": "de"},
+                "Mandarin": {"translate": "zh-CN", "tts": "zh"},
+                "Hindi":    {"translate": "hi",    "tts": "hi"},
             }
             lang_info = lang_map.get(target_lang, {"translate": "es", "tts": "es"})
             translate_code = lang_info["translate"]
             tts_code = lang_info["tts"]
 
+            # 1. Translate text
             translated_text = ""
             if text.strip():
                 try:
-                    translated_text = GoogleTranslator(source='auto', target=translate_code).translate(text)
+                    translated_text = await _rate_limited_translate(text, translate_code)
                 except Exception as e:
                     translated_text = f"[Translation Error: {str(e)}]"
 
@@ -112,12 +282,20 @@ async def websocket_translate(websocket: WebSocket):
                 except Exception as e:
                     print(f"TTS Error: {e}")
 
-            await websocket.send_json({
-                "translated": translated_text,
-                "audio_base64": audio_base64
-            })
-    except WebSocketDisconnect:
-        print("Translation client disconnected")
+            # Send response (if the socket is still open)
+            try:
+                await websocket.send_json({
+                    "translated": translated_text,
+                    "audio_base64": audio_base64,
+                })
+            except Exception:
+                break
+
+    # Run reader and processor concurrently
+    try:
+        await asyncio.gather(reader(), processor())
+    except Exception:
+        pass
 
 import re
 from datetime import datetime
@@ -374,6 +552,7 @@ async def chat_interaction(payload: dict):
     """
     message = payload.get("message", "")
     return {"reply": f"You asked: '{message}'. Based on the meeting transcript, yes, that was mentioned."}
+
 # Serve static frontend built files
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIST_DIR = os.path.join(CURRENT_DIR, "..", "frontend", "dist")

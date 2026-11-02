@@ -29,11 +29,13 @@ function App() {
   // Use a ref for isTranslating to avoid stale closures inside WS callbacks
   const isTranslatingRef = useRef(false);
   const targetLangRef = useRef('Spanish');
+  const translateDebounceRef = useRef(null);  // debounce timer for live translation
 
   useEffect(() => {
     // Cleanup on unmount
     return () => {
       stopRecording();
+      if (translateDebounceRef.current) clearTimeout(translateDebounceRef.current);
     };
   }, []);
 
@@ -70,12 +72,20 @@ function App() {
                 sttWsRef.current.send(JSON.stringify({ transcript }));
               }
               
-              // Sync with translate socket if active
+              // Debounced sync with translate socket if active
+              // This prevents flooding the translation API when speech results
+              // arrive in rapid succession. Only the latest text is sent after
+              // a 1-second quiet period.
               if (isTranslatingRef.current && translateWsRef.current?.readyState === WebSocket.OPEN) {
-                translateWsRef.current.send(JSON.stringify({
-                  text: transcript,
-                  target_language: targetLangRef.current
-                }));
+                if (translateDebounceRef.current) clearTimeout(translateDebounceRef.current);
+                translateDebounceRef.current = setTimeout(() => {
+                  if (translateWsRef.current?.readyState === WebSocket.OPEN) {
+                    translateWsRef.current.send(JSON.stringify({
+                      text: transcript,
+                      target_language: targetLangRef.current
+                    }));
+                  }
+                }, 1000); // wait 1 s after last speech result before translating
               }
             }
           }
