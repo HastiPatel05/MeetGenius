@@ -253,10 +253,7 @@ async def websocket_translate(websocket: WebSocket):
             # Language mapping
             lang_map = {
                 "Spanish":  {"translate": "es",    "tts": "es"},
-                "French":   {"translate": "fr",    "tts": "fr"},
                 "German":   {"translate": "de",    "tts": "de"},
-                "Mandarin": {"translate": "zh-CN", "tts": "zh"},
-                "Hindi":    {"translate": "hi",    "tts": "hi"},
             }
             lang_info = lang_map.get(target_lang, {"translate": "es", "tts": "es"})
             translate_code = lang_info["translate"]

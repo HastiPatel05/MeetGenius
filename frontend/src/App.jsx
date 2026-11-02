@@ -348,7 +348,7 @@ function App() {
                     onChange={e => setTargetLang(e.target.value)}
                     className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-indigo-500"
                   >
-                    {['Spanish', 'French', 'German', 'Mandarin', 'Hindi'].map(l => (
+                    {['Spanish', 'German'].map(l => (
                       <option key={l} value={l}>{l}</option>
                     ))}
                   </select>
